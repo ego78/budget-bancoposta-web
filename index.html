@@ -18,6 +18,15 @@
     .alert-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:11px;background:#fff}
     .pending-chip{background:#fff1c8;color:#8a5b00}
     .sync-bridge{position:fixed;left:0;bottom:0;width:2px;height:2px;min-width:2px;min-height:2px;padding:0;border:0;opacity:.01;z-index:-1}
+    html,body{max-width:100%;overflow-x:hidden}
+    .view,.card,#movementList,.movement{min-width:0;max-width:100%}
+    .movement{width:100%;overflow:hidden;align-items:center}
+    .movement-info{flex:1 1 auto;min-width:0;overflow:hidden}
+    .movement-info>div{flex:1 1 auto;min-width:0;overflow:hidden}
+    .movement-title{display:block;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .movement-meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .movement-amount{flex:0 0 auto;margin-left:8px;text-align:right}
+    @media(max-width:480px){.movement{gap:4px}.movement-icon{width:36px;height:36px;margin-right:8px}.movement-title{font-size:13px}.movement-meta{font-size:10px}.movement-amount{font-size:13px}.filters{grid-template-columns:minmax(0,1.7fr) minmax(92px,1fr)}}
   </style>
 </head>
 <body><main>
