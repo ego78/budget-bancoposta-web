@@ -17,6 +17,7 @@
     .daily-alert h2{display:flex;align-items:center;gap:8px}
     .alert-icon{display:grid;place-items:center;width:34px;height:34px;border-radius:11px;background:#fff}
     .pending-chip{background:#fff1c8;color:#8a5b00}
+    .sync-bridge{position:fixed;left:0;bottom:0;width:2px;height:2px;min-width:2px;min-height:2px;padding:0;border:0;opacity:.01;z-index:-1}
   </style>
 </head>
 <body><main>
@@ -39,7 +40,7 @@
   </div>
 </main>
 <div id="editModal" class="modal hidden"><div class="sheet"><div class="row"><h2>Modifica movimento</h2><button id="closeModal" class="secondary smallbtn">Chiudi</button></div><p id="editTitle"></p><div class="field"><label for="editCategory">Categoria</label><select id="editCategory"></select></div><div class="field"><label for="editNote">Nota personale</label><input id="editNote" maxlength="120" placeholder="Aggiungi una nota"></div><button id="saveMovement">Salva modifica</button></div></div>
-<textarea id="syncPayload" class="hidden" aria-hidden="true"></textarea><button id="runPrivateSync" class="hidden" aria-hidden="true"></button><output id="syncResult" class="hidden" aria-hidden="true"></output>
+<textarea id="syncPayload" class="sync-bridge" aria-hidden="true"></textarea><button id="runPrivateSync" class="sync-bridge" aria-hidden="true">Sincronizza</button><output id="syncResult" class="sync-bridge" aria-hidden="true"></output>
 <script type="module">
 import{initializeApp}from'https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js';
 import{initializeAppCheck,ReCaptchaEnterpriseProvider}from'https://www.gstatic.com/firebasejs/12.3.0/firebase-app-check.js';
