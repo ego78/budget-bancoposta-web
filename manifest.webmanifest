@@ -1,0 +1,10 @@
+{
+  "name": "Budget personale",
+  "short_name": "Budget",
+  "description": "Saldo, movimenti e budget personale privato",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#edf3f0",
+  "theme_color": "#103e33",
+  "icons": [{"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}
