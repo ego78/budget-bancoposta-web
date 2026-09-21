@@ -30,10 +30,11 @@
 <div id="editModal" class="modal hidden"><div class="sheet"><div class="row"><h2>Modifica movimento</h2><button id="closeModal" class="secondary smallbtn">Chiudi</button></div><p id="editTitle"></p><div class="field"><label for="editCategory">Categoria</label><select id="editCategory"></select></div><div class="field"><label for="editNote">Nota personale</label><input id="editNote" maxlength="120" placeholder="Aggiungi una nota"></div><button id="saveMovement">Salva modifica</button></div></div>
 <script type="module">
 import{initializeApp}from'https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js';
+import{initializeAppCheck,ReCaptchaEnterpriseProvider}from'https://www.gstatic.com/firebasejs/12.3.0/firebase-app-check.js';
 import{getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged}from'https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js';
 import{getFirestore,doc,getDoc,setDoc,serverTimestamp,collection,getDocs,query,orderBy,limit}from'https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js';
 const firebaseConfig={apiKey:'AIzaSyDO5L412boYXH4FkXYLY8r-W0KIWL-R8xo',authDomain:'budget-bancoposta.firebaseapp.com',projectId:'budget-bancoposta',storageBucket:'budget-bancoposta.firebasestorage.app',messagingSenderId:'511666390425',appId:'1:511666390425:web:23e4de16f5836e9dff3f08'};
-const firebaseApp=initializeApp(firebaseConfig),auth=getAuth(firebaseApp),db=getFirestore(firebaseApp),$=id=>document.getElementById(id),euro=n=>new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(Number(n)||0);
+const firebaseApp=initializeApp(firebaseConfig);initializeAppCheck(firebaseApp,{provider:new ReCaptchaEnterpriseProvider('6Ldi3sctAAAAAKggma5aRijvORvQLDBJQp_F1DOm'),isTokenAutoRefreshEnabled:true});const auth=getAuth(firebaseApp),db=getFirestore(firebaseApp),$=id=>document.getElementById(id),euro=n=>new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(Number(n)||0);
 const categories={income:'Entrate',groceries:'Spesa',fuel:'Carburante',bills:'Bollette',home:'Casa',health:'Salute',family:'Famiglia',leisure:'Tempo libero',cash:'Prelievi',savings:'Risparmio',transfer:'Trasferimenti',other:'Altro'};
 const expenseCats=['groceries','fuel','bills','home','health','family','leisure','cash','other'];
 let user=null,movements=[],editing=null,data={balance:0,balanceDate:'',reserve:0,planned:0,payday:'',limits:{}};
