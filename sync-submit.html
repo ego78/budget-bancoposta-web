@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="robots" content="noindex,nofollow,noarchive">
+  <meta name="referrer" content="no-referrer">
+  <title>Invio sincronizzazione privata</title>
+  <style>
+    :root{font-family:Inter,system-ui,-apple-system,sans-serif;color:#17362d;background:#edf4f0}*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:18px;background:radial-gradient(circle at 80% 0,#bcebd7 0,transparent 32%),#edf4f0}.card{width:min(760px,100%);background:#fff;border-radius:24px;padding:22px;box-shadow:0 16px 45px #17382f1f}h1{font-size:23px;margin:0 0 8px}p{color:#687e76;line-height:1.45}.notice{padding:12px 14px;border-radius:14px;background:#e8f6ef;color:#196044;font-size:13px}.field{margin:14px 0}label{display:block;font-size:13px;font-weight:750;margin-bottom:6px}input,textarea{width:100%;font:inherit;border:1px solid #cbdcd4;border-radius:13px;padding:12px;background:#fbfdfc}textarea{min-height:260px;resize:vertical;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}button{width:100%;border:0;border-radius:14px;padding:13px;background:linear-gradient(135deg,#147a59,#15956a);color:#fff;font:inherit;font-weight:800;cursor:pointer}.error{color:#b73737;min-height:20px;font-size:13px}.muted{font-size:12px}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace}
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>Invio sincronizzazione privata</h1>
+    <p class="notice">Questo modulo accetta soltanto una sessione monouso non scaduta. Non inserire password, OTP, PIN o credenziali BancoPosta.</p>
+    <form id="syncForm" method="post" action="https://script.google.com/macros/s/AKfycbwD4znHql8Wc28VyHf2C3MhfJXfR922FKNY1ElD-qdv89fbmVor34A2NNpbNll3mCUU/exec" autocomplete="off">
+      <div class="field"><label for="uid">UID</label><input id="uid" name="uid" required maxlength="160" spellcheck="false"></div>
+      <div class="field"><label for="sessionId">Sessione</label><input id="sessionId" name="sessionId" required maxlength="100" spellcheck="false"></div>
+      <div class="field"><label for="token">Token monouso</label><input id="token" name="token" required maxlength="200" spellcheck="false"></div>
+      <div class="field"><label for="payload">Payload JSON</label><textarea id="payload" name="payload" required spellcheck="false" placeholder='{"balance":0,"balanceDate":"AAAA-MM-GG","movements":[]}'></textarea></div>
+      <p id="error" class="error" role="alert"></p>
+      <button type="submit">Invia a Firebase</button>
+    </form>
+    <p class="muted">I dati non vengono salvati in questa pagina né nel repository. Dopo l’invio, il token viene consumato dal bridge.</p>
+  </main>
+  <script>
+    document.getElementById('syncForm').addEventListener('submit',event=>{
+      const error=document.getElementById('error');
+      try{const value=JSON.parse(document.getElementById('payload').value);if(!value||typeof value!=='object'||Array.isArray(value))throw new Error();error.textContent=''}
+      catch(_){event.preventDefault();error.textContent='Il payload deve essere un oggetto JSON valido.'}
+    });
+  </script>
+</body>
+</html>
