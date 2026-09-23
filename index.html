@@ -22,6 +22,26 @@
     @media(max-width:480px){.v2credit .daily-credit-amount{font-size:45px}.v2quick{grid-template-columns:1fr 1fr}.v2quick>div:last-child{grid-column:span 2}}
   
     @media(max-width:420px){.calendar{gap:3px}.cal-day{min-height:49px;padding:3px 1px;border-radius:9px}.cal-day .daynum{font-size:11px}.cal-day .daytotal{font-size:7.5px}.calendar-nav{gap:4px}.calendar-nav strong{min-width:96px;font-size:11px}}
+
+    .calendar-detail{min-width:0;max-width:100%;overflow:hidden}
+    .calendar-detail-head{min-width:0}
+    .calendar-detail-head>div{min-width:0}
+    .calendar-movement{min-width:0;max-width:100%;overflow:hidden}
+    .calendar-movement>span{min-width:0;flex:1 1 auto;overflow:hidden}
+    .calendar-movement>span>b{display:block;min-width:0;max-width:100%;font-size:12px;line-height:1.25;overflow-wrap:anywhere;word-break:break-word}
+    .calendar-movement>span>small{max-width:100%;overflow-wrap:anywhere;white-space:normal}
+    .calendar-movement>strong{flex:0 0 auto;max-width:30%;font-size:12px;text-align:right;overflow-wrap:anywhere}
+    @media(max-width:420px){
+      .calendar-detail{margin-left:0;margin-right:0}
+      .calendar-detail-head strong{font-size:13px}
+      .calendar-detail-head .ghost{padding:9px 12px;font-size:12px}
+      .calendar-summary{gap:4px}
+      .calendar-summary>div{padding:7px 3px;min-width:0}
+      .calendar-summary b{font-size:11px}
+      .calendar-movement{gap:6px;padding:10px 0}
+      .calendar-movement>span>b{font-size:11px}
+      .calendar-movement>strong{font-size:11px;max-width:28%}
+    }
 </style>
   <style>
     .daily-alert{border:1px solid #ffd9a2;background:linear-gradient(145deg,#fffaf1,#fff3df)}
