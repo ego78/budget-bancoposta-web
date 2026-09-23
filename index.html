@@ -71,6 +71,12 @@
     .daily-credit.low{background:#d28a2230;border-color:#ffd18b66}.daily-credit.over{background:#c6464638;border-color:#ffb0aa66}
     .bank-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}.bank-summary>div{background:#ffffff12;border:1px solid #ffffff18;border-radius:15px;padding:10px}.bank-summary small{color:#cce8dd}.bank-summary strong{display:block;margin-top:4px;font-size:15px}.pending-form{display:grid;grid-template-columns:1fr 1fr;gap:8px}.pending-form .full{grid-column:1/-1}.pending-manual{border:1px solid #f1d28e;background:#fffaf0;border-radius:18px;padding:14px;margin-top:12px}.pending-manual .movement{cursor:default}.pending-delete{padding:7px 9px;font-size:11px}.reconcile-note{font-size:11px;color:var(--muted);margin-top:7px}@media(max-width:480px){.bank-summary{grid-template-columns:1fr 1fr}.bank-summary>div:last-child{grid-column:span 2}}
   </style>
+  <meta name="theme-color" content="#0b4d3f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Budget">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 </head>
 <body><main>
   <header class="row topbar"><div class="brand"><img class="brandmark" src="icon.svg" alt=""><div><span class="eyebrow">IL MIO DENARO</span><h1>Budget personale</h1></div></div><button id="logout" class="secondary smallbtn hidden">Esci</button></header>
@@ -373,4 +379,12 @@ $('excludeMovement').onclick=async()=>{if(!editing)return;const patch={excluded:
 $('hideMovement').onclick=async()=>{if(!editing)return;await setDoc(doc(db,'users',user.uid,'movements',editing.id),{hidden:true,editedAt:serverTimestamp()},{merge:true});editing.hidden=true;$('editModal').classList.add('hidden');renderMovements();renderDashboard()};
 $('splitMovement').onclick=async()=>{if(!editing)return;const first=Math.abs(Number($('splitAmount').value)),total=Math.abs(Number(editing.amount));if(!first||first>=total){alert('Inserisci un importo inferiore al totale.');return}const sign=Number(editing.amount)<0?-1:1,batch=writeBatch(db),base=doc(db,'users',user.uid,'movements',editing.id),second=doc(collection(db,'users',user.uid,'movements'));batch.set(base,{amount:first*sign,category:$('editCategory').value,note:$('editNote').value.trim(),split:true,editedAt:serverTimestamp()},{merge:true});batch.set(second,{...editing,id:second.id,amount:(total-first)*sign,category:$('splitCategory').value,description:`${editing.description||editing.type} · parte 2`,split:true,sortDate:editing.sortDate||new Date(dateOf(editing)+'T12:00'),createdAt:serverTimestamp()});await batch.commit();$('editModal').classList.add('hidden');await loadMovements()};
 onAuthStateChanged(auth,async current=>{user=current;$('login').classList.toggle('hidden',!!user);$('app').classList.toggle('hidden',!user);$('logout').classList.toggle('hidden',!user);if(!user)return;const snap=await getDoc(doc(db,'users',user.uid,'budget','current'));if(snap.exists())data={...data,...snap.data(),limits:snap.data().limits||{}};if(data.inferredPendingDate!==today()){data.inferredPendingToday=0;data.inferredPendingDate=today()}renderTop();await loadMovements().catch(e=>{$('movementList').innerHTML='<p class="negative">Impossibile caricare i movimenti.</p>';console.error(e)});startAutomaticBankSync()});
-</script></body></html>
+</script>
+<script>
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => {});
+  });
+}
+</script>
+</body></html>
