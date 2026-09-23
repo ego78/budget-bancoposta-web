@@ -66,6 +66,9 @@ const firebaseConfig={apiKey:'AIzaSyDO5L412boYXH4FkXYLY8r-W0KIWL-R8xo',authDomai
 const firebaseApp=initializeApp(firebaseConfig);initializeAppCheck(firebaseApp,{provider:new ReCaptchaEnterpriseProvider('6Ldi3sctAAAAAKggma5aRijvORvQLDBJQp_F1DOm'),isTokenAutoRefreshEnabled:true});const auth=getAuth(firebaseApp),db=getFirestore(firebaseApp),$=id=>document.getElementById(id),euro=n=>new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(Number(n)||0);
 setPersistence(auth,browserLocalPersistence).catch(console.error);
 const BANK_API_ORIGIN='https://budget-bancoposta-api.ego78.workers.dev';
+const BANK_SYNC_TOKEN_KEY='budgetBancoPostaSyncToken';
+const BANK_LAST_SNAPSHOT_KEY='budgetBancoPostaLastSnapshotAt';
+let bankAutoTimer=null,bankAutoStarted=false;
 const categories={income:'Entrate',groceries:'Spesa',fuel:'Carburante',bills:'Bollette',subscriptions:'Abbonamenti',home:'Casa',health:'Salute',family:'Famiglia',leisure:'Tempo libero',cash:'Prelievi',savings:'Risparmio',transfer:'Trasferimenti',other:'Altro'};
 const categoryIcons={income:'↗',groceries:'🛒',fuel:'⛽',bills:'⚡',subscriptions:'◉',home:'⌂',health:'✚',family:'♥',leisure:'★',cash:'€',savings:'◆',transfer:'⇄',other:'•••'};
 const expenseCats=['groceries','fuel','bills','subscriptions','home','health','family','leisure','cash','other'];
@@ -162,16 +165,79 @@ fillCategorySelect($('categoryFilter'),true);fillCategorySelect($('editCategory'
 $('search').oninput=$('categoryFilter').onchange=()=>{visibleCount=50;renderMovements()};$('showMore').onclick=()=>{visibleCount+=50;renderMovements()};$('closeModal').onclick=()=>$('editModal').classList.add('hidden');$('editModal').onclick=e=>{if(e.target===$('editModal'))$('editModal').classList.add('hidden')};
 const bytesToBase64Url=bytes=>btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
 let pendingBankNonce=null,bankPopup=null;
-function startBankSync(){
+
+function getBankSyncToken(){return localStorage.getItem(BANK_SYNC_TOKEN_KEY)||''}
+function setBankSyncToken(token){if(token)localStorage.setItem(BANK_SYNC_TOKEN_KEY,token)}
+function clearBankSyncToken(){localStorage.removeItem(BANK_SYNC_TOKEN_KEY);localStorage.removeItem(BANK_LAST_SNAPSHOT_KEY)}
+
+async function fetchBankSnapshot({refresh=false,quiet=false}={}){
+  const token=getBankSyncToken();
+  if(!token)return null;
+  try{
+    const response=await fetch(`${BANK_API_ORIGIN}/${refresh?'refresh':'snapshot'}`,{
+      method:refresh?'POST':'GET',
+      headers:{Authorization:`Bearer ${token}`,Accept:'application/json'},
+      cache:'no-store'
+    });
+    if(response.status===401){
+      clearBankSyncToken();
+      if(!quiet){$('syncStatus').textContent='Autorizzazione da rinnovare'}
+      return null;
+    }
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok||!body.ok||!body.payload)throw new Error(body.message||body.error||`Errore BancoPosta ${response.status}`);
+    const payload=body.payload;
+    const stamp=String(payload.syncedAt||'');
+    const last=localStorage.getItem(BANK_LAST_SNAPSHOT_KEY)||'';
+    if(stamp&&stamp===last){
+      if(!quiet)$('syncStatus').textContent='Aggiornata';
+      return {payload,unchanged:true};
+    }
+    const result=await window.importPosteSnapshot(payload);
+    if(stamp)localStorage.setItem(BANK_LAST_SNAPSHOT_KEY,stamp);
+    $('syncStatus').textContent='Aggiornata';
+    $('lastSync').textContent=`Ultimo aggiornamento: ${new Date(payload.syncedAt||Date.now()).toLocaleString('it-IT')}`;
+    return {payload,result,unchanged:false};
+  }catch(e){
+    console.error('BancoPosta automatic sync:',e);
+    if(!quiet)$('syncStatus').textContent='Errore';
+    return null;
+  }
+}
+
+function startAutomaticBankSync(){
+  if(bankAutoStarted)return;
+  bankAutoStarted=true;
+  if(getBankSyncToken())fetchBankSnapshot({quiet:true});
+  bankAutoTimer=setInterval(()=>{
+    if(user&&getBankSyncToken())fetchBankSnapshot({quiet:true});
+  },5*60*1000);
+}
+
+async function startBankSync(){
   if(!user){alert('Accedi prima alla web app.');return}
   const button=$('syncPoste');
+  button.disabled=true;
+  button.textContent='Sincronizzazione…';
+  const token=getBankSyncToken();
+  if(token){
+    $('syncStatus').textContent='Aggiornamento…';
+    const direct=await fetchBankSnapshot({refresh:true,quiet:false});
+    if(direct){
+      button.disabled=false;
+      button.textContent='↻ Sincronizza con Poste';
+      return;
+    }
+  }
   pendingBankNonce=bytesToBase64Url(crypto.getRandomValues(new Uint8Array(24)));
   const url=`${BANK_API_ORIGIN}/start?client_nonce=${encodeURIComponent(pendingBankNonce)}`;
   bankPopup=window.open(url,'bancoposta-sync','popup,width=520,height=760');
-  if(!bankPopup){window.location.assign(url);return}
-  button.disabled=true;button.textContent='Autorizzazione in corso…';$('syncStatus').textContent='In attesa di Poste';
+  if(!bankPopup){button.disabled=false;button.textContent='↻ Sincronizza con Poste';window.location.assign(url);return}
+  button.textContent='Autorizzazione in corso…';
+  $('syncStatus').textContent='In attesa di Poste';
   const timer=setInterval(()=>{if(bankPopup?.closed){clearInterval(timer);button.disabled=false;button.textContent='↻ Sincronizza con Poste';if(pendingBankNonce)$('syncStatus').textContent='Pronta'}},700);
 }
+
 window.addEventListener('message',async event=>{
   if(event.origin!==BANK_API_ORIGIN)return;
   const msg=event.data;
@@ -181,10 +247,13 @@ window.addEventListener('message',async event=>{
   const button=$('syncPoste');
   try{
     if(!msg.ok)throw new Error(msg.error||'Sincronizzazione BancoPosta non riuscita.');
+    if(!msg.syncToken)throw new Error('Token di sincronizzazione non ricevuto dal Worker.');
+    setBankSyncToken(msg.syncToken);
     $('syncStatus').textContent='Importazione…';
     const result=await window.importPosteSnapshot(msg.payload);
+    if(msg.payload?.syncedAt)localStorage.setItem(BANK_LAST_SNAPSHOT_KEY,String(msg.payload.syncedAt));
     $('syncStatus').textContent='Aggiornata';
-    $('lastSync').textContent=`Ultimo aggiornamento: ${new Date().toLocaleString('it-IT')}`;
+    $('lastSync').textContent=`Ultimo aggiornamento: ${new Date(msg.payload?.syncedAt||Date.now()).toLocaleString('it-IT')}`;
     if(msg.payload?.truncated)alert(`Sincronizzazione completata (${result.imported} movimenti), ma Enable Banking ha indicato altre pagine disponibili.`);
   }catch(e){$('syncStatus').textContent='Errore';alert(e.message)}
   finally{button.disabled=false;button.textContent='↻ Sincronizza con Poste';try{bankPopup?.close()}catch{}bankPopup=null}
@@ -197,5 +266,5 @@ $('saveMovement').onclick=async()=>{if(!editing)return;const patch={category:$('
 $('excludeMovement').onclick=async()=>{if(!editing)return;const patch={excluded:!editing.excluded,editedAt:serverTimestamp()};await setDoc(doc(db,'users',user.uid,'movements',editing.id),patch,{merge:true});Object.assign(editing,patch);$('editModal').classList.add('hidden');renderMovements();renderDashboard()};
 $('hideMovement').onclick=async()=>{if(!editing)return;await setDoc(doc(db,'users',user.uid,'movements',editing.id),{hidden:true,editedAt:serverTimestamp()},{merge:true});editing.hidden=true;$('editModal').classList.add('hidden');renderMovements();renderDashboard()};
 $('splitMovement').onclick=async()=>{if(!editing)return;const first=Math.abs(Number($('splitAmount').value)),total=Math.abs(Number(editing.amount));if(!first||first>=total){alert('Inserisci un importo inferiore al totale.');return}const sign=Number(editing.amount)<0?-1:1,batch=writeBatch(db),base=doc(db,'users',user.uid,'movements',editing.id),second=doc(collection(db,'users',user.uid,'movements'));batch.set(base,{amount:first*sign,category:$('editCategory').value,note:$('editNote').value.trim(),split:true,editedAt:serverTimestamp()},{merge:true});batch.set(second,{...editing,id:second.id,amount:(total-first)*sign,category:$('splitCategory').value,description:`${editing.description||editing.type} · parte 2`,split:true,sortDate:editing.sortDate||new Date(dateOf(editing)+'T12:00'),createdAt:serverTimestamp()});await batch.commit();$('editModal').classList.add('hidden');await loadMovements()};
-onAuthStateChanged(auth,async current=>{user=current;$('login').classList.toggle('hidden',!!user);$('app').classList.toggle('hidden',!user);$('logout').classList.toggle('hidden',!user);if(!user)return;const snap=await getDoc(doc(db,'users',user.uid,'budget','current'));if(snap.exists())data={...data,...snap.data(),limits:snap.data().limits||{}};renderTop();await loadMovements().catch(e=>{$('movementList').innerHTML='<p class="negative">Impossibile caricare i movimenti.</p>';console.error(e)})});
+onAuthStateChanged(auth,async current=>{user=current;$('login').classList.toggle('hidden',!!user);$('app').classList.toggle('hidden',!user);$('logout').classList.toggle('hidden',!user);if(!user)return;const snap=await getDoc(doc(db,'users',user.uid,'budget','current'));if(snap.exists())data={...data,...snap.data(),limits:snap.data().limits||{}};renderTop();await loadMovements().catch(e=>{$('movementList').innerHTML='<p class="negative">Impossibile caricare i movimenti.</p>';console.error(e)});startAutomaticBankSync()});
 </script></body></html>
