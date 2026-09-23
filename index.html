@@ -42,7 +42,7 @@
       .calendar-movement>span>b{font-size:11px}
       .calendar-movement>strong{font-size:11px;max-width:28%}
     }
-</style>
+.sync-info{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}.sync-info>div{background:#f4f8f6;border-radius:14px;padding:11px;min-width:0}.sync-info small{display:block;font-size:9px;color:var(--muted);font-weight:800;letter-spacing:.25px}.sync-info strong{display:block;margin-top:5px;font-size:13px;overflow-wrap:anywhere}.auto-sync-line{font-size:12px;font-weight:800;color:var(--brand);margin:10px 0}.sync-card.sync-late .dot{background:#d99a16}.sync-card.sync-auth .dot,.sync-card.sync-error .dot{background:#d14b42}@media(max-width:420px){.sync-info{grid-template-columns:1fr}.sync-info strong{font-size:12px}}</style>
   <style>
     .daily-alert{border:1px solid #ffd9a2;background:linear-gradient(145deg,#fffaf1,#fff3df)}
     .daily-alert.over{border-color:#f0b0aa;background:linear-gradient(145deg,#fff8f7,#ffe9e6)}
@@ -102,7 +102,7 @@
       <div class="card"><h2>Spese per categoria</h2><div id="categoryStats"><p class="muted">Nessun dato disponibile.</p></div></div>
       <div class="card"><h2>Abbonamenti e ricorrenze</h2><div id="subscriptions"><p class="muted">Nessuna ricorrenza rilevata.</p></div></div>
       <div class="card"><h2>Previsione</h2><p id="forecastText" class="muted"></p><div id="recurring"></div></div>
-      <div class="card"><div class="row"><h2>Sincronizzazione</h2><div class="sync"><span class="dot"></span><small id="syncStatus">Pronta</small></div></div><p class="muted" id="lastSync">I dati vengono aggiornati dopo l’autorizzazione.</p><p class="muted" id="autoPendingInfo"></p><button id="syncPoste" class="widebtn">↻ Sincronizza con Poste</button><small>Si apre l’autorizzazione BancoPosta. Al termine saldo e movimenti vengono aggiornati automaticamente in sola lettura.</small></div>
+      <div class="card sync-card"><div class="row"><h2>Sincronizzazione</h2><div class="sync"><span id="syncDot" class="dot"></span><small id="syncStatus">Pronta</small></div></div><div class="sync-info"><div><small>ULTIMO AGGIORNAMENTO BANCOPOSTA</small><strong id="lastSync">In attesa</strong></div><div><small>PROSSIMO CONTROLLO AUTOMATICO</small><strong id="nextSync">—</strong></div></div><p class="auto-sync-line">↻ Aggiornamento automatico ogni ora</p><p class="muted" id="autoPendingInfo"></p><button id="syncPoste" class="widebtn">↻ Aggiorna adesso</button><small id="syncHelp">Saldo e nuovi movimenti vengono recuperati automaticamente. Usa il pulsante solo se vuoi controllare subito.</small></div>
     </section>
     <section id="movements" class="view hidden"><div class="card"><div class="row"><h2>Movimenti</h2><small id="movementCount"></small></div><div class="filters"><input id="search" type="search" placeholder="Cerca movimento"><select id="categoryFilter"><option value="">Tutte</option></select></div><div id="pendingSummary"></div><div class="pending-manual"><div class="row"><h2 style="margin:0">Non contabilizzate</h2><small>Inserimento rapido</small></div><p class="muted">BancoPosta non espone i singoli movimenti pending via API. Inseriscili qui: saranno conteggiati nel giorno corretto senza sottrarli di nuovo dal saldo disponibile.</p><div class="pending-form"><div><label for="manualPendingAmount"><small>Importo (€)</small></label><input id="manualPendingAmount" type="number" min="0.01" step="0.01" placeholder="3,90"></div><div><label for="manualPendingDate"><small>Data</small></label><input id="manualPendingDate" type="date"></div><div class="full"><label for="manualPendingDescription"><small>Descrizione (facoltativa)</small></label><input id="manualPendingDescription" maxlength="100" placeholder="Es. pagamento carta"></div></div><button id="addManualPending" class="widebtn">+ Aggiungi non contabilizzata</button><div id="manualPendingList"></div><div class="reconcile-note">Quando sincronizzi, l’app prova a riconciliare automaticamente una pending manuale con un nuovo movimento BancoPosta dello stesso importo e data operativa.</div></div><div id="movementList"><p class="muted">Nessun movimento importato.</p></div><button id="showMore" class="secondary widebtn hidden">Mostra altri 50</button></div></section>
     <section id="budgets" class="view hidden"><div class="card"><h2>Limiti mensili</h2><p class="muted">Riceverai un avviso visivo quando ti avvicini o superi un limite.</p><div id="budgetProgress"></div><div class="limits" id="limitInputs"></div><button id="saveLimits">Salva limiti</button><p id="limitStatus"></p></div></section>
@@ -169,7 +169,22 @@ function renderDailyCredit(){
 }
 function renderTop(){const d=days(today(),data.payday),usable=Math.max(0,data.balance-data.reserve-data.planned),booked=Number(data.bookedBalance),hasBooked=Number.isFinite(booked)&&data.bookedBalance!==null&&data.bookedBalance!=='',unbooked=hasBooked?Math.max(0,booked-Number(data.balance)):Number(data.unbookedTotal)||0;$('balanceView').textContent=euro(data.balance);$('availableBalanceView').textContent=euro(data.balance);$('bookedBalanceView').textContent=hasBooked?euro(booked):'—';$('unbookedTotalView').textContent=hasBooked?euro(unbooked):(data.unbookedTotal!=null?euro(unbooked):'—');$('balanceDateView').textContent=data.balanceDate?`al ${new Date(data.balanceDate+'T12:00').toLocaleDateString('it-IT')}`:'';$('todayView').textContent=d?euro(usable/d):'—';$('usableView').textContent=euro(usable);$('daysView').textContent=d?`${d} giorni al prossimo stipendio · ${euro(data.reserve)} protetti`:'Imposta la data del prossimo stipendio';for(const k of['balance','balanceDate','reserve','planned','payday'])$(k).value=data[k]??'';renderDailyCredit()}
 function currentMonthItems(){const key=today().slice(0,7);return movements.filter(m=>dateOf(m).slice(0,7)===key)}
-function renderDashboard(){renderDailyCredit();const items=currentMonthItems(),income=items.filter(m=>Number(m.amount)>0&&cat(m)==='income'&&!m.hidden).reduce((s,m)=>s+Number(m.amount),0),expenses=-items.filter(isRealExpense).reduce((s,m)=>s+Number(m.amount),0),saved=-items.filter(m=>cat(m)==='savings'&&Number(m.amount)<0).reduce((s,m)=>s+Number(m.amount),0);$('monthLabel').textContent=new Date().toLocaleDateString('it-IT',{month:'long',year:'numeric'});$('incomeView').textContent=euro(income);$('expenseView').textContent=euro(expenses);$('savingView').textContent=euro(income-expenses);renderDailyAlert();renderCategories(items);renderChart();renderCalendar();renderSubscriptions();renderForecast();renderBudgetProgress();const sync=data.lastSync?.toDate?.()||data.updatedAt?.toDate?.();$('lastSync').textContent=sync?`Ultimo aggiornamento: ${sync.toLocaleString('it-IT')}`:'In attesa della prima sincronizzazione';$('syncStatus').textContent=sync?'Aggiornata':'Pronta';const inferred=(data.inferredPendingDate===today()?Number(data.inferredPendingToday)||0:0);$('autoPendingInfo').textContent=inferred?`Rilevate oggi circa ${euro(inferred)} di nuove somme non contabilizzate dal confronto dei saldi. Il dato è una stima: BancoPosta non espone il dettaglio delle singole operazioni pending.`:''}
+function syncDateValue(){
+ const v=data.lastSync||data.updatedAt;
+ return v?.toDate?.()|| (v instanceof Date?v:null)
+}
+function renderSyncInfo(){
+ const card=document.querySelector('.sync-card'),sync=syncDateValue(),status=$('syncStatus'),last=$('lastSync'),next=$('nextSync');
+ card?.classList.remove('sync-late','sync-auth','sync-error');
+ if(!sync){last.textContent='In attesa della prima sincronizzazione';next.textContent='—';status.textContent=getBankSyncToken()?'Automatica attiva':'Autorizzazione richiesta';if(!getBankSyncToken())card?.classList.add('sync-auth');return}
+ last.textContent=sync.toLocaleString('it-IT');
+ const age=Date.now()-sync.getTime(),nextDate=new Date(sync.getTime()+60*60*1000);
+ next.textContent=age<90*60*1000?`entro ${nextDate.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`:'in attesa del prossimo aggiornamento';
+ if(!getBankSyncToken()){status.textContent='Autorizzazione richiesta';card?.classList.add('sync-auth')}
+ else if(age>90*60*1000){status.textContent='Aggiornamento in ritardo';card?.classList.add('sync-late')}
+ else status.textContent='Automatica attiva';
+}
+function renderDashboard(){renderDailyCredit();const items=currentMonthItems(),income=items.filter(m=>Number(m.amount)>0&&cat(m)==='income'&&!m.hidden).reduce((s,m)=>s+Number(m.amount),0),expenses=-items.filter(isRealExpense).reduce((s,m)=>s+Number(m.amount),0),saved=-items.filter(m=>cat(m)==='savings'&&Number(m.amount)<0).reduce((s,m)=>s+Number(m.amount),0);$('monthLabel').textContent=new Date().toLocaleDateString('it-IT',{month:'long',year:'numeric'});$('incomeView').textContent=euro(income);$('expenseView').textContent=euro(expenses);$('savingView').textContent=euro(income-expenses);renderDailyAlert();renderCategories(items);renderChart();renderCalendar();renderSubscriptions();renderForecast();renderBudgetProgress();renderSyncInfo();const inferred=(data.inferredPendingDate===today()?Number(data.inferredPendingToday)||0:0);$('autoPendingInfo').textContent=inferred?`Rilevate oggi circa ${euro(inferred)} di nuove somme non contabilizzate dal confronto dei saldi. Il dato è una stima: BancoPosta non espone il dettaglio delle singole operazioni pending.`:''}
 function renderDailyAlert(){const d=days(today(),data.payday),usable=Math.max(0,data.balance-data.reserve-data.planned),dailyLimit=d?usable/d:0,todays=movements.filter(m=>expenseDateOf(m)===today()&&isRealExpense(m)),baseSpent=todays.reduce((s,m)=>s+Math.abs(Number(m.amount)),0),pending=todays.filter(isPending).reduce((s,m)=>s+Math.abs(Number(m.amount)),0),inferred=(data.inferredPendingDate===today()&&!pending?Number(data.inferredPendingToday)||0:0),spent=baseSpent+inferred,box=$('dailyAlert');if(!d){box.classList.add('hidden');return}const over=spent>dailyLimit,diff=Math.abs(spent-dailyLimit);box.classList.remove('hidden','over','ok');box.classList.add(over?'over':'ok');$('dailyAlertIcon').textContent=over?'!':'✓';$('dailyAlertTitle').textContent=over?'Oggi hai superato il budget':'Budget di oggi sotto controllo';$('dailyAlertText').textContent=over?`Uscite di oggi ${euro(spent)}${pending?` (incluse ${euro(pending)} da contabilizzare)`:inferred?` (incluse circa ${euro(inferred)} rilevate automaticamente come non contabilizzate)`:''}: sei oltre di ${euro(diff)} rispetto al budget giornaliero di ${euro(dailyLimit)}.`:`Uscite di oggi ${euro(spent)}${pending?` (incluse ${euro(pending)} da contabilizzare)`:inferred?` (incluse circa ${euro(inferred)} rilevate automaticamente come non contabilizzate)`:''}. Restano ${euro(diff)} sul budget giornaliero di ${euro(dailyLimit)}.`}
 function renderCategories(items){const totals={};items.filter(isRealExpense).forEach(m=>totals[cat(m)]=(totals[cat(m)]||0)+Math.abs(Number(m.amount)));const max=Math.max(1,...Object.values(totals));$('categoryStats').innerHTML=Object.entries(totals).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="category-row"><div class="row"><span class="catline"><i class="caticon">${categoryIcons[k]||'•••'}</i>${categories[k]||k}</span><strong>${euro(v)}</strong></div><div class="bar"><span style="width:${v/max*100}%"></span></div></div>`).join('')||'<p class="muted">Nessuna spesa reale nel mese.</p>'}
 function renderChart(){const months=[];for(let i=5;i>=0;i--){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-i);months.push({key:d.toISOString().slice(0,7),label:d.toLocaleDateString('it-IT',{month:'short'}),value:0})}for(const m of movements){const x=months.find(x=>x.key===dateOf(m).slice(0,7));if(x&&isRealExpense(m))x.value+=Math.abs(Number(m.amount))}const max=Math.max(1,...months.map(x=>x.value));$('chart').innerHTML=months.map(x=>`<div class="chart-col" title="${euro(x.value)}"><div class="chart-bar" style="height:${Math.max(3,x.value/max*110)}px"></div><div class="chart-label">${x.label}<br>${Math.round(x.value)}€</div></div>`).join('')}
@@ -307,8 +322,8 @@ async function fetchBankSnapshot({refresh=false,quiet=false}={}){
     }
     const result=await window.importPosteSnapshot(payload);
     if(stamp)localStorage.setItem(BANK_LAST_SNAPSHOT_KEY,stamp);
-    $('syncStatus').textContent='Aggiornata';
-    $('lastSync').textContent=`Ultimo aggiornamento: ${new Date(payload.syncedAt||Date.now()).toLocaleString('it-IT')}`;
+    $('syncStatus').textContent='Automatica attiva';
+    const liveSync=new Date(payload.syncedAt||Date.now());$('lastSync').textContent=liveSync.toLocaleString('it-IT');$('nextSync').textContent=`entro ${new Date(liveSync.getTime()+3600000).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`;
     return {payload,result,unchanged:false};
   }catch(e){
     console.error('BancoPosta automatic sync:',e);
@@ -337,17 +352,17 @@ async function startBankSync(){
     const direct=await fetchBankSnapshot({refresh:true,quiet:false});
     if(direct){
       button.disabled=false;
-      button.textContent='↻ Sincronizza con Poste';
+      button.textContent='↻ Aggiorna adesso';
       return;
     }
   }
   pendingBankNonce=bytesToBase64Url(crypto.getRandomValues(new Uint8Array(24)));
   const url=`${BANK_API_ORIGIN}/start?client_nonce=${encodeURIComponent(pendingBankNonce)}`;
   bankPopup=window.open(url,'bancoposta-sync','popup,width=520,height=760');
-  if(!bankPopup){button.disabled=false;button.textContent='↻ Sincronizza con Poste';window.location.assign(url);return}
+  if(!bankPopup){button.disabled=false;button.textContent='↻ Aggiorna adesso';window.location.assign(url);return}
   button.textContent='Autorizzazione in corso…';
   $('syncStatus').textContent='In attesa di Poste';
-  const timer=setInterval(()=>{if(bankPopup?.closed){clearInterval(timer);button.disabled=false;button.textContent='↻ Sincronizza con Poste';if(pendingBankNonce)$('syncStatus').textContent='Pronta'}},700);
+  const timer=setInterval(()=>{if(bankPopup?.closed){clearInterval(timer);button.disabled=false;button.textContent='↻ Aggiorna adesso';if(pendingBankNonce)$('syncStatus').textContent='Pronta'}},700);
 }
 
 window.addEventListener('message',async event=>{
@@ -364,11 +379,11 @@ window.addEventListener('message',async event=>{
     $('syncStatus').textContent='Importazione…';
     const result=await window.importPosteSnapshot(msg.payload);
     if(msg.payload?.syncedAt)localStorage.setItem(BANK_LAST_SNAPSHOT_KEY,String(msg.payload.syncedAt));
-    $('syncStatus').textContent='Aggiornata';
-    $('lastSync').textContent=`Ultimo aggiornamento: ${new Date(msg.payload?.syncedAt||Date.now()).toLocaleString('it-IT')}`;
+    $('syncStatus').textContent='Automatica attiva';
+    const liveSync=new Date(msg.payload?.syncedAt||Date.now());$('lastSync').textContent=liveSync.toLocaleString('it-IT');$('nextSync').textContent=`entro ${new Date(liveSync.getTime()+3600000).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`;
     if(msg.payload?.truncated)alert(`Sincronizzazione completata (${result.imported} movimenti), ma Enable Banking ha indicato altre pagine disponibili.`);
   }catch(e){$('syncStatus').textContent='Errore';alert(e.message)}
-  finally{button.disabled=false;button.textContent='↻ Sincronizza con Poste';try{bankPopup?.close()}catch{}bankPopup=null}
+  finally{button.disabled=false;button.textContent='↻ Aggiorna adesso';try{bankPopup?.close()}catch{}bankPopup=null}
 });
 $('syncPoste').onclick=startBankSync;$('manualPendingDate').value=today();$('addManualPending').onclick=addManualPending;
 $('loginGoogle').onclick=()=>signInWithPopup(auth,new GoogleAuthProvider()).catch(e=>alert(e.message));$('logout').onclick=()=>signOut(auth);
