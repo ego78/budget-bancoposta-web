@@ -88,6 +88,9 @@
 <div class="v2quick">
   <div><small>Spesi oggi</small><strong id="spentTodayView">—</strong></div>
   <div><small>Budget oggi</small><strong id="dailyBudgetView">—</strong></div>
+  <div style="grid-column:1/-1;text-align:left;padding-top:4px">
+    <small id="todaySpendDetail" style="display:block;line-height:1.55;opacity:.88"></small>
+  </div>
   <div><small>Giorni allo stipendio</small><strong id="daysPayView">—</strong></div>
 </div>
 <div class="v2balance"><div><small>SALDO DISPONIBILE</small><strong id="balanceView">—</strong></div><div><small>Disponibile fino allo stipendio</small><strong id="usableView">—</strong></div></div>
@@ -146,14 +149,42 @@ function expenseDateOf(m){
   }
   return dateOf(m);
 }
+
+function dailyBaselineKey(){return `budgetDailyBaseline:${today()}`}
+function getDailyBaseline(){
+ try{return JSON.parse(localStorage.getItem(dailyBaselineKey())||'null')}catch(e){return null}
+}
+function ensureDailyBaseline(){
+ let b=getDailyBaseline();
+ const d=days(today(),data.payday);
+ const usable=Math.max(0,Number(data.balance)-Number(data.reserve)-Number(data.planned));
+ if(!b&&Number.isFinite(Number(data.balance))){
+   b={
+     day:today(),
+     balance:Number(data.balance),
+     dailyBudget:d?usable/d:0,
+     createdAt:new Date().toISOString()
+   };
+   localStorage.setItem(dailyBaselineKey(),JSON.stringify(b));
+ }
+ return b;
+}
+function dailySpendSignals(){
+ const todays=movements.filter(m=>expenseDateOf(m)===today()&&isRealExpense(m));
+ const movementSpent=todays.reduce((sum,m)=>sum+Math.abs(Number(m.amount)),0);
+ const baseline=ensureDailyBaseline();
+ const balanceSpent=baseline?Math.max(0,Number(baseline.balance)-Number(data.balance)):0;
+ // Do not sum the two signals: a bank movement may already explain the balance drop.
+ const effectiveSpent=Math.max(movementSpent,balanceSpent);
+ return{todays,movementSpent,balanceSpent,effectiveSpent,baseline};
+}
+
 function dailyCreditStats(){
   const d=days(today(),data.payday),usable=Math.max(0,data.balance-data.reserve-data.planned),dailyLimit=d?usable/d:0;
-  const todays=movements.filter(m=>expenseDateOf(m)===today()&&isRealExpense(m));
-  const bookedAndManual=todays.reduce((s,m)=>s+Math.abs(Number(m.amount)),0);
-  const manualPending=todays.filter(isPending).reduce((s,m)=>s+Math.abs(Number(m.amount)),0);
-  const inferred=0;
-  const spent=bookedAndManual,remaining=dailyLimit-spent;
-  return{d,dailyLimit,spent,remaining,inferred,manualPending};
+  const sig=dailySpendSignals();
+  const manualPending=sig.todays.filter(isPending).reduce((x,m)=>x+Math.abs(Number(m.amount)),0);
+  const spent=sig.effectiveSpent,remaining=dailyLimit-spent;
+  return{d,dailyLimit,spent,remaining,inferred:Math.max(0,sig.balanceSpent-sig.movementSpent),manualPending,...sig};
 }
 function renderDailyCredit(){
   const box=$('dailyCreditBox');if(!box)return;
@@ -166,6 +197,15 @@ function renderDailyCredit(){
   $('spentTodayView').textContent=euro(s.spent);
   $('dailyBudgetView').textContent=euro(s.dailyLimit);
   $('daysPayView').textContent=String(s.d);
+  const det=$('todaySpendDetail');
+  if(det){
+    const initialBudget=s.baseline?.dailyBudget;
+    det.innerHTML=
+      `Movimenti di oggi: <strong>${euro(s.movementSpent)}</strong><br>`+
+      `Rilevato dalla variazione del saldo: <strong>${euro(s.balanceSpent)}</strong><br>`+
+      `Budget iniziale di oggi: <strong>${initialBudget!=null?euro(initialBudget):'—'}</strong><br>`+
+      `Budget aggiornato: <strong>${euro(s.dailyLimit)}</strong>`;
+  }
 }
 function renderTop(){const d=days(today(),data.payday),usable=Math.max(0,data.balance-data.reserve-data.planned),booked=Number(data.bookedBalance),hasBooked=Number.isFinite(booked)&&data.bookedBalance!==null&&data.bookedBalance!=='',unbooked=hasBooked?Math.max(0,booked-Number(data.balance)):Number(data.unbookedTotal)||0;$('balanceView').textContent=euro(data.balance);$('availableBalanceView').textContent=euro(data.balance);$('bookedBalanceView').textContent=hasBooked?euro(booked):'—';$('unbookedTotalView').textContent=hasBooked?euro(unbooked):(data.unbookedTotal!=null?euro(unbooked):'—');$('balanceDateView').textContent=data.balanceDate?`al ${new Date(data.balanceDate+'T12:00').toLocaleDateString('it-IT')}`:'';$('todayView').textContent=d?euro(usable/d):'—';$('usableView').textContent=euro(usable);$('daysView').textContent=d?`${d} giorni al prossimo stipendio · ${euro(data.reserve)} protetti`:'Imposta la data del prossimo stipendio';for(const k of['balance','balanceDate','reserve','planned','payday'])$(k).value=data[k]??'';renderDailyCredit()}
 function currentMonthItems(){const key=today().slice(0,7);return movements.filter(m=>dateOf(m).slice(0,7)===key)}
@@ -315,6 +355,8 @@ async function updateInferredPending(payload){
 
 window.importPosteSnapshot=async payload=>{
   if(!user)throw new Error('Accesso richiesto');
+  // Preserve the first balance/budget seen today before applying a newer bank snapshot.
+  ensureDailyBaseline();
   await updateInferredPending(payload);
   const ref=collection(db,'users',user.uid,'movements'),existing=await getDocs(ref),ops=[],existingItems=existing.docs.map(x=>({id:x.id,...x.data(),_ref:x.ref}));
   const incoming=(payload.movements||[]).map(m=>({...m,source:'poste'}));
@@ -479,7 +521,7 @@ onAuthStateChanged(auth,async current=>{user=current;$('login').classList.toggle
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=4.7").catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=4.8").catch(() => {});
   });
 }
 </script>
