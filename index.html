@@ -173,14 +173,36 @@ function syncDateValue(){
  const v=data.lastSync||data.updatedAt;
  return v?.toDate?.()|| (v instanceof Date?v:null)
 }
+function nextBankCronDate(from=new Date()){
+ const hours=[6,10,14,18], minute=15;
+ for(let add=0;add<2;add++){
+   for(const h of hours){
+     const d=new Date(Date.UTC(
+       from.getUTCFullYear(),
+       from.getUTCMonth(),
+       from.getUTCDate()+add,
+       h,minute,0,0
+     ));
+     if(d>from)return d;
+   }
+ }
+ return null;
+}
+function setNextBankCronText(){
+ const d=nextBankCronDate();
+ if(!$('nextSync')||!d)return;
+ const sameDay=d.toLocaleDateString('it-IT')===new Date().toLocaleDateString('it-IT');
+ $('nextSync').textContent=sameDay
+   ? `previsto alle ${d.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`
+   : `previsto ${d.toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}`;
+}
 function renderSyncInfo(){
  const card=document.querySelector('.sync-card'),sync=syncDateValue(),status=$('syncStatus'),last=$('lastSync'),next=$('nextSync');
  card?.classList.remove('sync-late','sync-auth','sync-error');
  if(!sync){last.textContent='In attesa della prima sincronizzazione';next.textContent='—';status.textContent=getBankSyncToken()?'Automatica attiva':'Autorizzazione richiesta';if(!getBankSyncToken())card?.classList.add('sync-auth');return}
  last.textContent=sync.toLocaleString('it-IT');
- const age=Date.now()-sync.getTime(),now=new Date(),nextDate=new Date(now);
- nextDate.setMinutes(0,0,0);nextDate.setHours(nextDate.getHours()+1);
- next.textContent=age<90*60*1000?`controllo automatico attivo`:'in attesa del prossimo aggiornamento';
+ const age=Date.now()-sync.getTime();
+ setNextBankCronText();
  if(!getBankSyncToken()){status.textContent='Autorizzazione richiesta';card?.classList.add('sync-auth')}
  else if(age>90*60*1000){status.textContent='Aggiornamento in ritardo';card?.classList.add('sync-late')}
  else status.textContent='Automatica attiva';
@@ -350,6 +372,7 @@ async function fetchBankSyncStatus(){
       $('lastSync').textContent=live.toLocaleString('it-IT');
       $('syncStatus').textContent='Automatica attiva';
       document.querySelector('.sync-card')?.classList.remove('sync-error','sync-late','sync-auth');
+      setNextBankCronText();
     }
     return info;
   }catch(e){console.error('Controllo sincronizzazione automatica:',e);return null}
@@ -381,7 +404,7 @@ async function fetchBankSnapshot({refresh=false,quiet=false}={}){
     const result=await window.importPosteSnapshot(payload);
     if(stamp)localStorage.setItem(BANK_LAST_SNAPSHOT_KEY,stamp);
     $('syncStatus').textContent='Automatica attiva';
-    const liveSync=new Date(payload.syncedAt||Date.now());$('lastSync').textContent=liveSync.toLocaleString('it-IT');$('nextSync').textContent=`entro ${new Date(liveSync.getTime()+3600000).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`;
+    const liveSync=new Date(payload.syncedAt||Date.now());$('lastSync').textContent=liveSync.toLocaleString('it-IT');setNextBankCronText();
     return {payload,result,unchanged:false};
   }catch(e){
     console.error('BancoPosta automatic sync:',e);
@@ -438,7 +461,7 @@ window.addEventListener('message',async event=>{
     const result=await window.importPosteSnapshot(msg.payload);
     if(msg.payload?.syncedAt)localStorage.setItem(BANK_LAST_SNAPSHOT_KEY,String(msg.payload.syncedAt));
     $('syncStatus').textContent='Automatica attiva';
-    const liveSync=new Date(msg.payload?.syncedAt||Date.now());$('lastSync').textContent=liveSync.toLocaleString('it-IT');$('nextSync').textContent=`entro ${new Date(liveSync.getTime()+3600000).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`;
+    const liveSync=new Date(msg.payload?.syncedAt||Date.now());$('lastSync').textContent=liveSync.toLocaleString('it-IT');setNextBankCronText();
     if(msg.payload?.truncated)alert(`Sincronizzazione completata (${result.imported} movimenti), ma Enable Banking ha indicato altre pagine disponibili.`);
   }catch(e){$('syncStatus').textContent='Errore';alert(e.message)}
   finally{button.disabled=false;button.textContent='↻ Aggiorna adesso';try{bankPopup?.close()}catch{}bankPopup=null}
@@ -456,7 +479,7 @@ onAuthStateChanged(auth,async current=>{user=current;$('login').classList.toggle
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=4.6").catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=4.7").catch(() => {});
   });
 }
 </script>
