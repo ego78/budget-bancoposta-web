@@ -151,8 +151,8 @@ function dailyCreditStats(){
   const todays=movements.filter(m=>expenseDateOf(m)===today()&&isRealExpense(m));
   const bookedAndManual=todays.reduce((s,m)=>s+Math.abs(Number(m.amount)),0);
   const manualPending=todays.filter(isPending).reduce((s,m)=>s+Math.abs(Number(m.amount)),0);
-  const inferred=(data.inferredPendingDate===today()&&!manualPending?Number(data.inferredPendingToday)||0:0);
-  const spent=bookedAndManual+inferred,remaining=dailyLimit-spent;
+  const inferred=0;
+  const spent=bookedAndManual,remaining=dailyLimit-spent;
   return{d,dailyLimit,spent,remaining,inferred,manualPending};
 }
 function renderDailyCredit(){
@@ -184,8 +184,8 @@ function renderSyncInfo(){
  else if(age>90*60*1000){status.textContent='Aggiornamento in ritardo';card?.classList.add('sync-late')}
  else status.textContent='Automatica attiva';
 }
-function renderDashboard(){renderDailyCredit();const items=currentMonthItems(),income=items.filter(m=>Number(m.amount)>0&&cat(m)==='income'&&!m.hidden).reduce((s,m)=>s+Number(m.amount),0),expenses=-items.filter(isRealExpense).reduce((s,m)=>s+Number(m.amount),0),saved=-items.filter(m=>cat(m)==='savings'&&Number(m.amount)<0).reduce((s,m)=>s+Number(m.amount),0);$('monthLabel').textContent=new Date().toLocaleDateString('it-IT',{month:'long',year:'numeric'});$('incomeView').textContent=euro(income);$('expenseView').textContent=euro(expenses);$('savingView').textContent=euro(income-expenses);renderDailyAlert();renderCategories(items);renderChart();renderCalendar();renderSubscriptions();renderForecast();renderBudgetProgress();renderSyncInfo();const inferred=(data.inferredPendingDate===today()?Number(data.inferredPendingToday)||0:0);$('autoPendingInfo').textContent=inferred?`Rilevate oggi circa ${euro(inferred)} di nuove somme non contabilizzate dal confronto dei saldi. Il dato è una stima: BancoPosta non espone il dettaglio delle singole operazioni pending.`:''}
-function renderDailyAlert(){const d=days(today(),data.payday),usable=Math.max(0,data.balance-data.reserve-data.planned),dailyLimit=d?usable/d:0,todays=movements.filter(m=>expenseDateOf(m)===today()&&isRealExpense(m)),baseSpent=todays.reduce((s,m)=>s+Math.abs(Number(m.amount)),0),pending=todays.filter(isPending).reduce((s,m)=>s+Math.abs(Number(m.amount)),0),inferred=(data.inferredPendingDate===today()&&!pending?Number(data.inferredPendingToday)||0:0),spent=baseSpent+inferred,box=$('dailyAlert');if(!d){box.classList.add('hidden');return}const over=spent>dailyLimit,diff=Math.abs(spent-dailyLimit);box.classList.remove('hidden','over','ok');box.classList.add(over?'over':'ok');$('dailyAlertIcon').textContent=over?'!':'✓';$('dailyAlertTitle').textContent=over?'Oggi hai superato il budget':'Budget di oggi sotto controllo';$('dailyAlertText').textContent=over?`Uscite di oggi ${euro(spent)}${pending?` (incluse ${euro(pending)} da contabilizzare)`:inferred?` (incluse circa ${euro(inferred)} rilevate automaticamente come non contabilizzate)`:''}: sei oltre di ${euro(diff)} rispetto al budget giornaliero di ${euro(dailyLimit)}.`:`Uscite di oggi ${euro(spent)}${pending?` (incluse ${euro(pending)} da contabilizzare)`:inferred?` (incluse circa ${euro(inferred)} rilevate automaticamente come non contabilizzate)`:''}. Restano ${euro(diff)} sul budget giornaliero di ${euro(dailyLimit)}.`}
+function renderDashboard(){renderDailyCredit();const items=currentMonthItems(),income=items.filter(m=>Number(m.amount)>0&&cat(m)==='income'&&!m.hidden).reduce((s,m)=>s+Number(m.amount),0),expenses=-items.filter(isRealExpense).reduce((s,m)=>s+Number(m.amount),0),saved=-items.filter(m=>cat(m)==='savings'&&Number(m.amount)<0).reduce((s,m)=>s+Number(m.amount),0);$('monthLabel').textContent=new Date().toLocaleDateString('it-IT',{month:'long',year:'numeric'});$('incomeView').textContent=euro(income);$('expenseView').textContent=euro(expenses);$('savingView').textContent=euro(income-expenses);renderDailyAlert();renderCategories(items);renderChart();renderCalendar();renderSubscriptions();renderForecast();renderBudgetProgress();renderSyncInfo();$('autoPendingInfo').textContent='';}
+function renderDailyAlert(){const d=days(today(),data.payday),usable=Math.max(0,data.balance-data.reserve-data.planned),dailyLimit=d?usable/d:0,todays=movements.filter(m=>expenseDateOf(m)===today()&&isRealExpense(m)),baseSpent=todays.reduce((s,m)=>s+Math.abs(Number(m.amount)),0),pending=todays.filter(isPending).reduce((s,m)=>s+Math.abs(Number(m.amount)),0),inferred=0,spent=baseSpent,box=$('dailyAlert');if(!d){box.classList.add('hidden');return}const over=spent>dailyLimit,diff=Math.abs(spent-dailyLimit);box.classList.remove('hidden','over','ok');box.classList.add(over?'over':'ok');$('dailyAlertIcon').textContent=over?'!':'✓';$('dailyAlertTitle').textContent=over?'Oggi hai superato il budget':'Budget di oggi sotto controllo';$('dailyAlertText').textContent=over?`Uscite di oggi ${euro(spent)}${pending?` (incluse ${euro(pending)} da contabilizzare)`:inferred?` (incluse circa ${euro(inferred)} rilevate automaticamente come non contabilizzate)`:''}: sei oltre di ${euro(diff)} rispetto al budget giornaliero di ${euro(dailyLimit)}.`:`Uscite di oggi ${euro(spent)}${pending?` (incluse ${euro(pending)} da contabilizzare)`:inferred?` (incluse circa ${euro(inferred)} rilevate automaticamente come non contabilizzate)`:''}. Restano ${euro(diff)} sul budget giornaliero di ${euro(dailyLimit)}.`}
 function renderCategories(items){const totals={};items.filter(isRealExpense).forEach(m=>totals[cat(m)]=(totals[cat(m)]||0)+Math.abs(Number(m.amount)));const max=Math.max(1,...Object.values(totals));$('categoryStats').innerHTML=Object.entries(totals).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="category-row"><div class="row"><span class="catline"><i class="caticon">${categoryIcons[k]||'•••'}</i>${categories[k]||k}</span><strong>${euro(v)}</strong></div><div class="bar"><span style="width:${v/max*100}%"></span></div></div>`).join('')||'<p class="muted">Nessuna spesa reale nel mese.</p>'}
 function renderChart(){const months=[];for(let i=5;i>=0;i--){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-i);months.push({key:d.toISOString().slice(0,7),label:d.toLocaleDateString('it-IT',{month:'short'}),value:0})}for(const m of movements){const x=months.find(x=>x.key===dateOf(m).slice(0,7));if(x&&isRealExpense(m))x.value+=Math.abs(Number(m.amount))}const max=Math.max(1,...months.map(x=>x.value));$('chart').innerHTML=months.map(x=>`<div class="chart-col" title="${euro(x.value)}"><div class="chart-bar" style="height:${Math.max(3,x.value/max*110)}px"></div><div class="chart-label">${x.label}<br>${Math.round(x.value)}€</div></div>`).join('')}
 function dailyBudget(){const d=days(today(),data.payday),usable=Math.max(0,data.balance-data.reserve-data.planned);return d?usable/d:0}
@@ -248,23 +248,12 @@ function openEdit(m){editing=m;$('editTitle').textContent=`${m.description||m.ty
 function dedupeMovements(list){const kept=[];for(const m of list){if(isExcludedInternal(m))continue;const words=new Set((m.description||m.type||'').toLowerCase().replace(/[^a-zà-ù0-9 ]/g,' ').split(/\s+/).filter(x=>x.length>3&&!/^\d+$/.test(x))),base=`${dateOf(m)}|${Number(m.amount).toFixed(2)}`;const dup=kept.find(x=>x._base===base&&([...words].filter(w=>x._words.has(w)).length>=2||(words.size&&[...words].every(w=>x._words.has(w)))));if(dup){if(m.source==='poste'&&dup.source!=='poste'){Object.assign(dup,m);dup._base=base;dup._words=words}continue}m._base=base;m._words=words;kept.push(m)}return kept.map(({_base,_words,...m})=>m)}
 async function loadMovements(){const snap=await getDocs(query(collection(db,'users',user.uid,'movements'),orderBy('sortDate','desc')));movements=dedupeMovements(snap.docs.map(x=>({id:x.id,...x.data()}))).sort((a,b)=>{const ta=a.sortDate?.toDate?.()?.getTime?.()||Date.parse(a.sortDate||dateOf(a)||0)||0,tb=b.sortDate?.toDate?.()?.getTime?.()||Date.parse(b.sortDate||dateOf(b)||0)||0;return tb-ta});renderMovements();renderDashboard()}
 async function updateInferredPending(payload){
-  if(!user||payload.unbookedTotal==null)return;
-  const newTotal=Math.max(0,Number(payload.unbookedTotal)||0);
-  const budgetRef=doc(db,'users',user.uid,'budget','current');
-  const day=today();
-
-  // Il pending dello snapshot rappresenta lo stato corrente:
-  // non deve essere sommato nuovamente ad ogni refresh.
-  const manualToday=movements
-    .filter(m=>m.source==='manual-pending'&&isPending(m)&&expenseDateOf(m)===day&&!m.hidden)
-    .reduce((sum,m)=>sum+Math.abs(Number(m.amount)||0),0);
-
-  const inferred=manualToday>0 ? 0 : Number(newTotal.toFixed(2));
-  data.inferredPendingToday=inferred;
-  data.inferredPendingDate=day;
-  await setDoc(budgetRef,{
-    inferredPendingToday:inferred,
-    inferredPendingDate:day
+  if(!user)return;
+  data.inferredPendingToday=0;
+  data.inferredPendingDate=today();
+  await setDoc(doc(db,'users',user.uid,'budget','current'),{
+    inferredPendingToday:0,
+    inferredPendingDate:today()
   },{merge:true});
 }
 
@@ -402,7 +391,7 @@ onAuthStateChanged(auth,async current=>{user=current;$('login').classList.toggle
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=4.2").catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=4.3").catch(() => {});
   });
 }
 </script>
