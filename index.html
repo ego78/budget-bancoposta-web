@@ -336,7 +336,12 @@ async function fetchBankSyncStatus(){
     const info=body.status||{};
     const errAt=info.lastErrorAt?Date.parse(info.lastErrorAt):0;
     const okAt=info.lastSuccessfulSync?Date.parse(info.lastSuccessfulSync):0;
-    if(errAt&&(!okAt||errAt>okAt)){
+    if(info.rateLimitReason==='ASPSP_RATE_LIMIT_EXCEEDED'&&info.cooldownUntil){
+      $('syncStatus').textContent='Limite BancoPosta raggiunto';
+      document.querySelector('.sync-card')?.classList.add('sync-error');
+      const d=new Date(info.cooldownUntil);
+      $('nextSync').textContent=`nuovo tentativo dopo ${d.toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}`;
+    }else if(errAt&&(!okAt||errAt>okAt)){
       $('syncStatus').textContent='Automatico fallito';
       document.querySelector('.sync-card')?.classList.add('sync-error');
       $('nextSync').textContent=`errore ${new Date(info.lastErrorAt).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`;
@@ -451,7 +456,7 @@ onAuthStateChanged(auth,async current=>{user=current;$('login').classList.toggle
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=4.5").catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=4.6").catch(() => {});
   });
 }
 </script>
