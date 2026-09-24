@@ -178,8 +178,9 @@ function renderSyncInfo(){
  card?.classList.remove('sync-late','sync-auth','sync-error');
  if(!sync){last.textContent='In attesa della prima sincronizzazione';next.textContent='—';status.textContent=getBankSyncToken()?'Automatica attiva':'Autorizzazione richiesta';if(!getBankSyncToken())card?.classList.add('sync-auth');return}
  last.textContent=sync.toLocaleString('it-IT');
- const age=Date.now()-sync.getTime(),nextDate=new Date(sync.getTime()+60*60*1000);
- next.textContent=age<90*60*1000?`entro ${nextDate.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`:'in attesa del prossimo aggiornamento';
+ const age=Date.now()-sync.getTime(),now=new Date(),nextDate=new Date(now);
+ nextDate.setMinutes(0,0,0);nextDate.setHours(nextDate.getHours()+1);
+ next.textContent=age<90*60*1000?`previsto alle ${nextDate.toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`:'in attesa del prossimo aggiornamento';
  if(!getBankSyncToken()){status.textContent='Autorizzazione richiesta';card?.classList.add('sync-auth')}
  else if(age>90*60*1000){status.textContent='Aggiornamento in ritardo';card?.classList.add('sync-late')}
  else status.textContent='Automatica attiva';
@@ -242,7 +243,40 @@ function pendingMatchesBooked(p,b){
   return delta<=1;
 }
 
-function renderMovements(){renderManualPending();const term=$('search').value.toLowerCase(),filter=$('categoryFilter').value,list=movements.filter(m=>!m.hidden&&(!term||`${m.description||''} ${m.type||''} ${m.note||''}`.toLowerCase().includes(term))&&(!filter||cat(m)===filter)),pending=list.filter(isPending),pendingTotal=pending.reduce((s,m)=>s+Math.abs(Number(m.amount)),0);$('movementCount').textContent=`${list.length} movimenti`;$('pendingSummary').innerHTML=pending.length?`<div class="pending-box"><div class="row"><span>Da contabilizzare</span><strong>${euro(pendingTotal)}</strong></div><small>${pending.length} operazioni incluse nel budget</small></div>`:'';$('movementList').innerHTML='';if(!list.length){$('movementList').innerHTML='<p class="muted">Nessun movimento trovato.</p>';$('showMore').classList.add('hidden');return}const shown=list.slice(0,visibleCount),groups={};shown.forEach(m=>(groups[dateOf(m)||'Senza data']??=[]).push(m));for(const [date,items] of Object.entries(groups)){const box=document.createElement('div');box.className='day-group';const total=items.filter(isRealExpense).reduce((s,m)=>s+Math.abs(Number(m.amount)),0),label=date==='Senza data'?date:new Date(date+'T12:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'});box.innerHTML=`<div class="row day-head"><span>${label}</span><span>${euro(total)}</span></div>`;items.forEach(m=>box.append(movementRow(m)));$('movementList').append(box)}$('showMore').classList.toggle('hidden',shown.length>=list.length)}
+function renderMovements(){
+  renderManualPending();
+  const term=$('search').value.toLowerCase(),filter=$('categoryFilter').value;
+  const list=movements.filter(m=>!m.hidden&&(!term||`${m.description||''} ${m.type||''} ${m.note||''}`.toLowerCase().includes(term))&&(!filter||cat(m)===filter));
+  const pending=list.filter(isPending),pendingTotal=pending.reduce((sum,m)=>sum+Math.abs(Number(m.amount)),0);
+  $('movementCount').textContent=`${list.length} movimenti`;
+  $('pendingSummary').innerHTML=pending.length?`<div class="pending-box"><div class="row"><span>Da contabilizzare</span><strong>${euro(pendingTotal)}</strong></div><small>${pending.length} operazioni incluse nel budget</small></div>`:'';
+  $('movementList').innerHTML='';
+  if(!list.length){$('movementList').innerHTML='<p class="muted">Nessun movimento trovato.</p>';$('showMore').classList.add('hidden');return}
+  const shown=list.slice(0,visibleCount),groups={};
+  shown.forEach(m=>{
+    const key=expenseDateOf(m)||'Senza data';
+    (groups[key]??=[]).push(m);
+  });
+  const dates=Object.keys(groups).sort((a,b)=>{
+    if(a==='Senza data')return 1;
+    if(b==='Senza data')return -1;
+    return b.localeCompare(a);
+  });
+  for(const date of dates){
+    const items=groups[date].sort((a,b)=>{
+      const ta=a.sortDate?.toDate?.()?.getTime?.()||Date.parse(a.sortDate||dateOf(a)||0)||0;
+      const tb=b.sortDate?.toDate?.()?.getTime?.()||Date.parse(b.sortDate||dateOf(b)||0)||0;
+      return tb-ta;
+    });
+    const box=document.createElement('div');box.className='day-group';
+    const total=items.filter(isRealExpense).reduce((sum,m)=>sum+Math.abs(Number(m.amount)),0);
+    const label=date==='Senza data'?date:new Date(date+'T12:00').toLocaleDateString('it-IT',{weekday:'long',day:'numeric',month:'long'});
+    box.innerHTML=`<div class="row day-head"><span>${label}</span><span>${euro(total)}</span></div>`;
+    items.forEach(m=>box.append(movementRow(m)));
+    $('movementList').append(box);
+  }
+  $('showMore').classList.toggle('hidden',shown.length>=list.length);
+}
 function renderBudgetProgress(){const totals={};currentMonthItems().filter(isRealExpense).forEach(m=>totals[cat(m)]=(totals[cat(m)]||0)+Math.abs(Number(m.amount)));$('budgetProgress').innerHTML=expenseCats.map(k=>{const spent=totals[k]||0,lim=Number(data.limits?.[k])||0,p=lim?Math.min(100,spent/lim*100):0;return`<div class="category-row"><div class="row"><span class="catline"><i class="caticon">${categoryIcons[k]}</i>${categories[k]}</span><small class="${lim&&spent>lim?'negative':''}">${euro(spent)}${lim?' / '+euro(lim):''}</small></div><div class="bar"><span class="${lim&&spent>lim?'over':''}" style="width:${p}%"></span></div></div>`}).join('');for(const k of expenseCats){const el=$(`limit-${k}`);if(el)el.value=data.limits?.[k]||''}}
 function openEdit(m){editing=m;$('editTitle').textContent=`${m.description||m.type||'Movimento'} · ${euro(m.amount)}`;$('editCategory').value=cat(m);$('editNote').value=m.note||'';$('splitAmount').value='';$('splitCategory').value=cat(m);$('excludeMovement').textContent=m.excluded?'Includi nel budget':'Escludi dal budget';$('editModal').classList.remove('hidden')}
 function dedupeMovements(list){const kept=[];for(const m of list){if(isExcludedInternal(m))continue;const words=new Set((m.description||m.type||'').toLowerCase().replace(/[^a-zà-ù0-9 ]/g,' ').split(/\s+/).filter(x=>x.length>3&&!/^\d+$/.test(x))),base=`${dateOf(m)}|${Number(m.amount).toFixed(2)}`;const dup=kept.find(x=>x._base===base&&([...words].filter(w=>x._words.has(w)).length>=2||(words.size&&[...words].every(w=>x._words.has(w)))));if(dup){if(m.source==='poste'&&dup.source!=='poste'){Object.assign(dup,m);dup._base=base;dup._words=words}continue}m._base=base;m._words=words;kept.push(m)}return kept.map(({_base,_words,...m})=>m)}
@@ -290,6 +324,32 @@ function getBankSyncToken(){return localStorage.getItem(BANK_SYNC_TOKEN_KEY)||''
 function setBankSyncToken(token){if(token)localStorage.setItem(BANK_SYNC_TOKEN_KEY,token)}
 function clearBankSyncToken(){localStorage.removeItem(BANK_SYNC_TOKEN_KEY);localStorage.removeItem(BANK_LAST_SNAPSHOT_KEY)}
 
+async function fetchBankSyncStatus(){
+  const token=getBankSyncToken();if(!token)return null;
+  try{
+    const response=await fetch(`${BANK_API_ORIGIN}/sync-status`,{
+      headers:{Authorization:`Bearer ${token}`,Accept:'application/json'},cache:'no-store'
+    });
+    if(response.status===401){clearBankSyncToken();renderSyncInfo();return null}
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok||!body.ok)return null;
+    const info=body.status||{};
+    const errAt=info.lastErrorAt?Date.parse(info.lastErrorAt):0;
+    const okAt=info.lastSuccessfulSync?Date.parse(info.lastSuccessfulSync):0;
+    if(errAt&&(!okAt||errAt>okAt)){
+      $('syncStatus').textContent='Automatico fallito';
+      document.querySelector('.sync-card')?.classList.add('sync-error');
+      $('nextSync').textContent=`errore ${new Date(info.lastErrorAt).toLocaleTimeString('it-IT',{hour:'2-digit',minute:'2-digit'})}`;
+    }else if(okAt){
+      const live=new Date(info.lastSuccessfulSync);
+      $('lastSync').textContent=live.toLocaleString('it-IT');
+      $('syncStatus').textContent='Automatica attiva';
+      document.querySelector('.sync-card')?.classList.remove('sync-error','sync-late','sync-auth');
+    }
+    return info;
+  }catch(e){console.error('Controllo sincronizzazione automatica:',e);return null}
+}
+
 async function fetchBankSnapshot({refresh=false,quiet=false}={}){
   const token=getBankSyncToken();
   if(!token)return null;
@@ -328,9 +388,9 @@ async function fetchBankSnapshot({refresh=false,quiet=false}={}){
 function startAutomaticBankSync(){
   if(bankAutoStarted)return;
   bankAutoStarted=true;
-  if(getBankSyncToken())fetchBankSnapshot({quiet:true});
+  if(getBankSyncToken()){fetchBankSnapshot({quiet:true});fetchBankSyncStatus();}
   bankAutoTimer=setInterval(()=>{
-    if(user&&getBankSyncToken())fetchBankSnapshot({quiet:true});
+    if(user&&getBankSyncToken()){fetchBankSnapshot({quiet:true});fetchBankSyncStatus();}
   },5*60*1000);
 }
 
@@ -391,7 +451,7 @@ onAuthStateChanged(auth,async current=>{user=current;$('login').classList.toggle
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js?v=4.3").catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=4.4").catch(() => {});
   });
 }
 </script>
