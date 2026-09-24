@@ -252,16 +252,20 @@ async function updateInferredPending(payload){
   const newTotal=Math.max(0,Number(payload.unbookedTotal)||0);
   const budgetRef=doc(db,'users',user.uid,'budget','current');
   const day=today();
-  const previousTotal=Number(data.unbookedTotal);
-  const hasPrevious=Number.isFinite(previousTotal)&&data.unbookedTotal!==null&&data.unbookedTotal!=='';
-  let inferred=(data.inferredPendingDate===day?Number(data.inferredPendingToday)||0:0);
-  if(hasPrevious){
-    const delta=Number((newTotal-previousTotal).toFixed(2));
-    if(delta>0.005)inferred=Number((inferred+delta).toFixed(2));
-  }
+
+  // Il pending dello snapshot rappresenta lo stato corrente:
+  // non deve essere sommato nuovamente ad ogni refresh.
+  const manualToday=movements
+    .filter(m=>m.source==='manual-pending'&&isPending(m)&&expenseDateOf(m)===day&&!m.hidden)
+    .reduce((sum,m)=>sum+Math.abs(Number(m.amount)||0),0);
+
+  const inferred=manualToday>0 ? 0 : Number(newTotal.toFixed(2));
   data.inferredPendingToday=inferred;
   data.inferredPendingDate=day;
-  await setDoc(budgetRef,{inferredPendingToday:inferred,inferredPendingDate:day},{merge:true});
+  await setDoc(budgetRef,{
+    inferredPendingToday:inferred,
+    inferredPendingDate:day
+  },{merge:true});
 }
 
 window.importPosteSnapshot=async payload=>{
@@ -398,7 +402,7 @@ onAuthStateChanged(auth,async current=>{user=current;$('login').classList.toggle
 <script>
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(() => {});
+    navigator.serviceWorker.register("./sw.js?v=4.2").catch(() => {});
   });
 }
 </script>
