@@ -140,7 +140,7 @@ let readOnlyFamily=false;
 function canEdit(){return !!user&&!readOnlyFamily}
 function applyFamilyMode(){document.body.classList.toggle('family-readonly',readOnlyFamily);if(readOnlyFamily){document.querySelectorAll('#budgets input,#settings input,#settings select,#plannedName,#plannedAmount,#plannedDate,#manualPendingAmount,#manualPendingDate,#manualPendingDescription').forEach(el=>el.disabled=true);const b=document.getElementById('syncStatus');if(b)b.textContent='Dati condivisi in sola lettura';}}
 let user=null,movements=[],editing=null,visibleCount=50,calendarCursor=new Date(),selectedCalendarDate='',data={balance:0,bookedBalance:null,unbookedTotal:null,balanceDate:'',reserve:0,planned:0,payday:'',limits:{},savingGoal:0,plannedExpenses:[],inferredPendingToday:0,inferredPendingDate:''};
-const today=()=>new Date().toISOString().slice(0,10),days=(a,b)=>Math.max(0,Math.ceil((Date.parse(b+'T12:00:00Z')-Date.parse(a+'T12:00:00Z'))/86400000));
+const today=()=>{const p=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Rome',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const v=Object.fromEntries(p.map(x=>[x.type,x.value]));return `${v.year}-${v.month}-${v.day}`},days=(a,b)=>Math.max(0,Math.ceil((Date.parse(b+'T12:00:00Z')-Date.parse(a+'T12:00:00Z'))/86400000));
 function guessCategory(m){const s=`${m.description||''} ${m.type||''}`.toLowerCase(),a=Number(m.amount);if(a>0&&!/girofondo|trasferimento/.test(s))return'income';if(/salvadanaio|risparmi/.test(s))return'savings';if(/girofondo|trasferimento|bonifico.*(mio|conto)/.test(s))return'transfer';if(/eni|q8|esso|tamoil|ip |carbur|benz|diesel/.test(s))return'fuel';if(/netflix|youtube|spotify|google play|disney|prime video|dazn|abbonamento|ricorrente/.test(s))return'subscriptions';if(/conad|coop|lidl|eurospin|penny|md |supermerc|aliment|market|panific|ortofrutta/.test(s))return'groceries';if(/enel|energia|gas|acqua|tim|vodafone|wind|iliad|kena|bollett/.test(s))return'bills';if(/leroy|brico|ferrament|mobil|arredo|casa/.test(s))return'home';if(/farmac|medic|sanit|ospedal/.test(s))return'health';if(/prelievo|atm/.test(s))return'cash';if(/ristor|bar |pizzeria|friggitoria|pasticceria|cinema/.test(s))return'leisure';if(/scuola|cartotecn|cartoler|bambin|ovs kids|famigl/.test(s))return'family';return'other'}
 const cat=m=>m.category||guessCategory(m);
 const movementText=m=>`${m.description||''} ${m.type||''} ${m.details||''}`.toLowerCase();
@@ -148,6 +148,15 @@ const isExcludedInternal=m=>['transfer','savings'].includes(cat(m))||/giro\s?fon
 const isRealExpense=m=>Number(m.amount)<0&&!m.hidden&&!m.excluded&&!isExcludedInternal(m);
 const isPending=m=>m.pending===true||m.status==='pending'||m.accounted===false||/non contabil|da contabil|in attesa/.test(`${m.status||''} ${m.type||''}`.toLowerCase());
 const dateOf=m=>m.operationDate||m.accountingDate||m.date||m.sortDate?.toDate?.().toISOString().slice(0,10)||'';
+function operationDateOf(m){
+  const raw=m.operationDate||m.date;
+  if(raw){const iso=String(raw).match(/^\d{4}-\d{2}-\d{2}/);if(iso)return iso[0]}
+  const s=String(m.description||m.type||'');
+  const match=s.match(/(?:^|\D)([0-3]?\d)[\/.-]([01]?\d)[\/.-](20\d{2})(?:\D|$)/);
+  if(!match)return'';
+  const d=String(Number(match[1])).padStart(2,'0'),mo=String(Number(match[2])).padStart(2,'0'),y=match[3],iso=y+'-'+mo+'-'+d,check=new Date(iso+'T12:00:00');
+  return !Number.isNaN(check.getTime())&&check.getFullYear()===Number(y)&&check.getMonth()+1===Number(mo)&&check.getDate()===Number(d)?iso:'';
+}
 function expenseDateOf(m){
   if(m.operationDate)return m.operationDate;
   const s=String(m.description||m.type||'');
@@ -180,26 +189,26 @@ function ensureDailyBaseline(){
  return b;
 }
 function dailySpendSignals(){
- const todays=movements.filter(m=>expenseDateOf(m)===today()&&isRealExpense(m));
+ const todays=movements.filter(m=>operationDateOf(m)===today()&&isRealExpense(m));
  const movementSpent=todays.reduce((sum,m)=>sum+Math.abs(Number(m.amount)),0);
  const baseline=ensureDailyBaseline();
  const balanceSpent=baseline?Math.max(0,Number(baseline.balance)-Number(data.balance)):0;
- // Do not sum the two signals: a bank movement may already explain the balance drop.
- const effectiveSpent=Math.max(movementSpent,balanceSpent);
+ // The balance already affects the available budget. Only movements dated today count as today's spending.
+ const effectiveSpent=movementSpent;
  return{todays,movementSpent,balanceSpent,effectiveSpent,baseline};
 }
 
 function plannedFutureTotal(){const e=data.payday||'9999-12-31';return(data.plannedExpenses||[]).filter(x=>x.date>=today()&&x.date<=e).reduce((a,x)=>a+Math.abs(Number(x.amount)||0),0)}
 function effectivePlanned(){return Math.max(Number(data.planned)||0,plannedFutureTotal())}
 function goalAmount(){return Math.max(0,Number(data.savingGoal)||0)}
-function dynamicBudgetStats(){const d=days(today(),data.payday),planned=effectivePlanned(),goal=goalAmount(),distributable=Math.max(0,Number(data.balance)-Number(data.reserve)-planned-goal),daily=d?distributable/d:0,sig=dailySpendSignals(),remaining=daily-sig.effectiveSpent,base=sig.baseline?.dailyBudget,carry=base==null?0:daily-base;return{d,planned,goal,distributable,daily,spent:sig.effectiveSpent,remaining,carry,...sig}}
+function dynamicBudgetStats(){const d=days(today(),data.payday),planned=effectivePlanned(),goal=goalAmount(),distributable=Math.max(0,Number(data.balance)-Number(data.reserve)-planned-goal),daily=d?distributable/d:0,sig=dailySpendSignals(),dailyLimit=d?daily+sig.movementSpent/d:0,remaining=dailyLimit-sig.effectiveSpent,base=sig.baseline?.dailyBudget,carry=base==null?0:daily-base;return{d,planned,goal,distributable,daily,dailyLimit,spent:sig.effectiveSpent,remaining,carry,...sig}}
 function isoLocal(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
 function rangeSpend(a,b){return movements.filter(m=>isRealExpense(m)&&expenseDateOf(m)>=a&&expenseDateOf(m)<=b).reduce((x,m)=>x+Math.abs(Number(m.amount)),0)}
 function renderComparisons(){const n=new Date(),dow=(n.getDay()+6)%7,ws=new Date(n);ws.setDate(n.getDate()-dow);const pws=new Date(ws);pws.setDate(ws.getDate()-7);const pwe=new Date(ws);pwe.setDate(ws.getDate()-1);const cw=rangeSpend(isoLocal(ws),isoLocal(n)),pw=rangeSpend(isoLocal(pws),isoLocal(pwe)),wd=pw?(cw-pw)/pw*100:null;$('weekCompare').textContent=wd==null?euro(cw):`${euro(cw)} · ${wd>=0?'+':''}${wd.toFixed(0)}%`;const cm=isoLocal(n).slice(0,7),pd=new Date(n.getFullYear(),n.getMonth()-1,1),pm=isoLocal(pd).slice(0,7),mc=movements.filter(x=>isRealExpense(x)&&expenseDateOf(x).startsWith(cm)),mp=movements.filter(x=>isRealExpense(x)&&expenseDateOf(x).startsWith(pm)),cv=mc.reduce((a,x)=>a+Math.abs(Number(x.amount)),0),pv=mp.reduce((a,x)=>a+Math.abs(Number(x.amount)),0),md=pv?(cv-pv)/pv*100:null;$('monthCompare').textContent=md==null?euro(cv):`${euro(cv)} · ${md>=0?'+':''}${md.toFixed(0)}%`;const c={};mc.forEach(x=>c[cat(x)]=(c[cat(x)]||0)+Math.abs(Number(x.amount)));const top=Object.entries(c).sort((a,b)=>b[1]-a[1])[0];$('categoryTrend').textContent=top?`Categoria principale: ${categories[top[0]]||top[0]} (${euro(top[1])}).`:'Nessuna spesa da confrontare.'}
 function renderPeriodForecast(){const x=dynamicBudgetStats(),d30=new Date();d30.setDate(d30.getDate()-30);const spent=rangeSpend(isoLocal(d30),today()),projected=Math.max(0,Number(data.balance)-x.planned-x.daily*x.d),margin=projected-x.goal;$('periodAvailable').textContent=euro(x.distributable);$('periodSpent').textContent=euro(spent);$('projectedBalance').textContent=euro(projected);$('goalMargin').textContent=`${margin>=0?'+':'−'} ${euro(Math.abs(margin))}`;$('dynamicBudgetNote').textContent=x.carry>0?`Budget aumentato di ${euro(x.carry)} rispetto all'inizio di oggi.`:x.carry<0?`Budget ridotto di ${euro(Math.abs(x.carry))} rispetto all'inizio di oggi.`:'Budget ricalcolato automaticamente.';$('goalProgressBar').style.width=`${x.goal?Math.min(100,projected/x.goal*100):0}%`;$('goalProgressText').textContent=x.goal?`Obiettivo ${euro(x.goal)} · previsione ${euro(projected)}`:'Nessun obiettivo impostato.'}
 function renderPlannedExpenses(){const box=$('plannedExpenseList');if(!box)return;const l=[...(data.plannedExpenses||[])].sort((a,b)=>a.date.localeCompare(b.date));box.innerHTML=l.length?l.map((x,i)=>`<div class="planned-row row"><span><strong>${x.name}</strong><small style="display:block">${new Date(x.date+'T12:00').toLocaleDateString('it-IT')}</small></span><span style="text-align:right"><strong>${euro(x.amount)}</strong><br><button class="secondary" data-plan-del="${i}">Elimina</button></span></div>`).join(''):'<p class="muted">Nessuna spesa prevista.</p>';box.querySelectorAll('[data-plan-del]').forEach(b=>b.onclick=async()=>{data.plannedExpenses.splice(Number(b.dataset.planDel),1);await saveBudgetExtras()})}
 async function saveBudgetExtras(){if(!canEdit())return;await setDoc(doc(db,'users',FAMILY_OWNER_UID,'budget','current'),{savingGoal:Number(data.savingGoal)||0,plannedExpenses:data.plannedExpenses||[]},{merge:true});renderAll()}
-function dailyCreditStats(){const x=dynamicBudgetStats(),manualPending=x.todays.filter(isPending).reduce((a,m)=>a+Math.abs(Number(m.amount)),0);return{d:x.d,dailyLimit:x.daily,spent:x.spent,remaining:x.remaining,inferred:Math.max(0,x.balanceSpent-x.movementSpent),manualPending,...x}}
+function dailyCreditStats(){const x=dynamicBudgetStats(),manualPending=x.todays.filter(isPending).reduce((a,m)=>a+Math.abs(Number(m.amount)),0);return{d:x.d,dailyLimit:x.dailyLimit,spent:x.spent,remaining:x.remaining,manualPending,...x}}
 function renderDailyCredit(){
   const box=$('dailyCreditBox');if(!box)return;
   const s=dailyCreditStats();
@@ -215,10 +224,11 @@ function renderDailyCredit(){
   if(det){
     const initialBudget=s.baseline?.dailyBudget;
     det.innerHTML=
-      `Movimenti di oggi: <strong>${euro(s.movementSpent)}</strong><br>`+
-      `Rilevato dalla variazione del saldo: <strong>${euro(s.balanceSpent)}</strong><br>`+
+      `Spese con data operazione di oggi: <strong>${euro(s.movementSpent)}</strong><br>`+
+      `Variazione del saldo (non sommata alle spese odierne): <strong>${euro(s.balanceSpent)}</strong><br>`+
       `Budget iniziale di oggi: <strong>${initialBudget!=null?euro(initialBudget):'—'}</strong><br>`+
-      `Budget aggiornato: <strong>${euro(s.dailyLimit)}</strong>`;
+      `Budget massimo per oggi: <strong>${euro(s.dailyLimit)}</strong><br>`+
+      `Quota giornaliera ricalcolata: <strong>${euro(s.daily)}</strong>`;
   }
 }
 function renderTop(){const d=days(today(),data.payday),usable=Math.max(0,data.balance-data.reserve-effectivePlanned()-goalAmount()),booked=Number(data.bookedBalance),hasBooked=Number.isFinite(booked)&&data.bookedBalance!==null&&data.bookedBalance!=='',unbooked=hasBooked?Math.max(0,booked-Number(data.balance)):Number(data.unbookedTotal)||0;$('balanceView').textContent=euro(data.balance);$('availableBalanceView').textContent=euro(data.balance);$('bookedBalanceView').textContent=hasBooked?euro(booked):'—';$('unbookedTotalView').textContent=hasBooked?euro(unbooked):(data.unbookedTotal!=null?euro(unbooked):'—');$('balanceDateView').textContent=data.balanceDate?`al ${new Date(data.balanceDate+'T12:00').toLocaleDateString('it-IT')}`:'';$('todayView').textContent=d?euro(usable/d):'—';$('usableView').textContent=euro(usable);$('daysView').textContent=d?`${d} giorni al prossimo stipendio · ${euro(data.reserve)} protetti`:'Imposta la data del prossimo stipendio';for(const k of['balance','balanceDate','reserve','planned','payday'])$(k).value=data[k]??'';if($('savingGoal'))$('savingGoal').value=data.savingGoal||'';renderDailyCredit()}
@@ -262,7 +272,7 @@ function renderSyncInfo(){
  else status.textContent='Automatica attiva';
 }
 function renderDashboard(){renderDailyCredit();const items=currentMonthItems(),income=items.filter(m=>Number(m.amount)>0&&cat(m)==='income'&&!m.hidden).reduce((s,m)=>s+Number(m.amount),0),expenses=-items.filter(isRealExpense).reduce((s,m)=>s+Number(m.amount),0),saved=-items.filter(m=>cat(m)==='savings'&&Number(m.amount)<0).reduce((s,m)=>s+Number(m.amount),0);$('monthLabel').textContent=new Date().toLocaleDateString('it-IT',{month:'long',year:'numeric'});$('incomeView').textContent=euro(income);$('expenseView').textContent=euro(expenses);$('savingView').textContent=euro(income-expenses);renderDailyAlert();renderCategories(items);renderChart();renderCalendar();renderSubscriptions();renderForecast();renderBudgetProgress();renderComparisons();renderPeriodForecast();renderPlannedExpenses();renderSyncInfo();$('autoPendingInfo').textContent='';}
-function renderDailyAlert(){const d=days(today(),data.payday),usable=Math.max(0,data.balance-data.reserve-data.planned),dailyLimit=d?usable/d:0,todays=movements.filter(m=>expenseDateOf(m)===today()&&isRealExpense(m)),baseSpent=todays.reduce((s,m)=>s+Math.abs(Number(m.amount)),0),pending=todays.filter(isPending).reduce((s,m)=>s+Math.abs(Number(m.amount)),0),inferred=0,spent=baseSpent,box=$('dailyAlert');if(!d){box.classList.add('hidden');return}const over=spent>dailyLimit,diff=Math.abs(spent-dailyLimit);box.classList.remove('hidden','over','ok');box.classList.add(over?'over':'ok');$('dailyAlertIcon').textContent=over?'!':'✓';$('dailyAlertTitle').textContent=over?'Oggi hai superato il budget':'Budget di oggi sotto controllo';$('dailyAlertText').textContent=over?`Uscite di oggi ${euro(spent)}${pending?` (incluse ${euro(pending)} da contabilizzare)`:inferred?` (incluse circa ${euro(inferred)} rilevate automaticamente come non contabilizzate)`:''}: sei oltre di ${euro(diff)} rispetto al budget giornaliero di ${euro(dailyLimit)}.`:`Uscite di oggi ${euro(spent)}${pending?` (incluse ${euro(pending)} da contabilizzare)`:inferred?` (incluse circa ${euro(inferred)} rilevate automaticamente come non contabilizzate)`:''}. Restano ${euro(diff)} sul budget giornaliero di ${euro(dailyLimit)}.`}
+function renderDailyAlert(){const s=dailyCreditStats(),box=$('dailyAlert');if(!s.d){box.classList.add('hidden');return}const spent=s.spent,pending=s.manualPending,dailyLimit=s.dailyLimit,over=spent>dailyLimit,diff=Math.abs(s.remaining),pendingNote=pending?` (incluse ${euro(pending)} da contabilizzare)`:'';box.classList.remove('hidden','over','ok');box.classList.add(over?'over':'ok');$('dailyAlertIcon').textContent=over?'!':'✓';$('dailyAlertTitle').textContent=over?'Oggi hai superato il budget':'Budget di oggi sotto controllo';$('dailyAlertText').textContent=over?`Uscite di oggi ${euro(spent)}${pendingNote}: hai superato di ${euro(diff)} il budget giornaliero di ${euro(dailyLimit)}.`:`Uscite di oggi ${euro(spent)}${pendingNote}. Restano ${euro(s.remaining)} sul budget giornaliero di ${euro(dailyLimit)}.`}
 function renderCategories(items){const totals={};items.filter(isRealExpense).forEach(m=>totals[cat(m)]=(totals[cat(m)]||0)+Math.abs(Number(m.amount)));const max=Math.max(1,...Object.values(totals));$('categoryStats').innerHTML=Object.entries(totals).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="category-row"><div class="row"><span class="catline"><i class="caticon">${categoryIcons[k]||'•••'}</i>${categories[k]||k}</span><strong>${euro(v)}</strong></div><div class="bar"><span style="width:${v/max*100}%"></span></div></div>`).join('')||'<p class="muted">Nessuna spesa reale nel mese.</p>'}
 function renderChart(){const months=[];for(let i=5;i>=0;i--){const d=new Date();d.setDate(1);d.setMonth(d.getMonth()-i);months.push({key:d.toISOString().slice(0,7),label:d.toLocaleDateString('it-IT',{month:'short'}),value:0})}for(const m of movements){const x=months.find(x=>x.key===dateOf(m).slice(0,7));if(x&&isRealExpense(m))x.value+=Math.abs(Number(m.amount))}const max=Math.max(1,...months.map(x=>x.value));$('chart').innerHTML=months.map(x=>`<div class="chart-col" title="${euro(x.value)}"><div class="chart-bar" style="height:${Math.max(3,x.value/max*110)}px"></div><div class="chart-label">${x.label}<br>${Math.round(x.value)}€</div></div>`).join('')}
 function dailyBudget(){return dynamicBudgetStats().daily}
