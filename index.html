@@ -181,21 +181,30 @@ function expenseDateOf(m){
 
 function dailyBaselineKey(){return `budgetDailyBaseline:${today()}`}
 function getDailyBaseline(){
- try{return JSON.parse(localStorage.getItem(dailyBaselineKey())||'null')}catch(e){return null}
+ try{
+   const b=JSON.parse(localStorage.getItem(dailyBaselineKey())||'null');
+   return b?.day===today()&&b?.bankSnapshotAnchored===true?b:null;
+ }catch(e){return null}
 }
 function ensureDailyBaseline(){
- let b=getDailyBaseline();
+ return getDailyBaseline();
+}
+function captureDailyBaselineFromSnapshot(payload,syncStats){
+ const current=getDailyBaseline();
+ if(current)return current;
  const d=days(today(),data.payday);
- const usable=Math.max(0,Number(data.balance)-Number(data.reserve)-effectivePlanned()-goalAmount());
- if(!b&&Number.isFinite(Number(data.balance))){
-   b={
-     day:today(),
-     balance:Number(data.balance),
-     dailyBudget:d?usable/d:0,
-     createdAt:new Date().toISOString()
-   };
-   localStorage.setItem(dailyBaselineKey(),JSON.stringify(b));
- }
+ const reconstructedOpeningBalance=Math.max(0,Number(payload.balance)||0)
+   +(Number(syncStats?.inferredPendingToday)||0)
+   +(Number(syncStats?.visibleSpendToday)||0);
+ const usable=Math.max(0,reconstructedOpeningBalance-Number(data.reserve||0)-effectivePlanned()-goalAmount());
+ const b={
+   day:today(),
+   balance:reconstructedOpeningBalance,
+   dailyBudget:d?usable/d:0,
+   bankSnapshotAnchored:true,
+   createdAt:new Date().toISOString()
+ };
+ localStorage.setItem(dailyBaselineKey(),JSON.stringify(b));
  return b;
 }
 function dailySpendSignals(){
@@ -415,13 +424,12 @@ async function updateInferredPending(payload){
   };
   await setDoc(doc(db,'users',FAMILY_OWNER_UID,'budget','current'),patch,{merge:true});
   Object.assign(data,patch);
+  return{inferredPendingToday,visibleSpendToday,olderPostingDrop};
 }
 
 window.importPosteSnapshot=async payload=>{
   if(!canEdit())throw new Error('Operazione riservata al titolare');
-  // Preserve the first balance/budget seen today before applying a newer bank snapshot.
-  ensureDailyBaseline();
-  await updateInferredPending(payload);
+  const syncStats=await updateInferredPending(payload);
   const ref=collection(db,'users',FAMILY_OWNER_UID,'movements'),existing=await getDocs(ref),ops=[],existingItems=existing.docs.map(x=>({id:x.id,...x.data(),_ref:x.ref}));
   const incoming=(payload.movements||[]).map(m=>({...m,source:'poste'}));
   const matchedManual=new Set();
@@ -438,7 +446,7 @@ window.importPosteSnapshot=async payload=>{
   if(payload.bookedBalance!=null)patch.bookedBalance=Number(payload.bookedBalance);
   if(payload.unbookedTotal!=null)patch.unbookedTotal=Number(payload.unbookedTotal);
   await setDoc(doc(db,'users',FAMILY_OWNER_UID,'budget','current'),patch,{merge:true});
-  Object.assign(data,patch);renderTop();await loadMovements();
+  Object.assign(data,patch);captureDailyBaselineFromSnapshot(payload,syncStats);renderTop();await loadMovements();
   return{imported:incoming.length,reconciled:matchedManual.size}
 }
 $('runPrivateSync').onclick=async()=>{if(!canEdit())return;try{const result=await window.importPosteSnapshot(JSON.parse($('syncPayload').value));$('syncResult').dataset.state='done';$('syncResult').value=JSON.stringify(result)}catch(e){$('syncResult').dataset.state='error';$('syncResult').value=e.message}}
@@ -508,6 +516,10 @@ async function fetchBankSnapshot({refresh=false,quiet=false}={}){
     const stamp=String(payload.syncedAt||'');
     const last=localStorage.getItem(BANK_LAST_SNAPSHOT_KEY)||'';
     if(stamp&&stamp===last){
+      if(!getDailyBaseline())captureDailyBaselineFromSnapshot(payload,{
+        inferredPendingToday:data.inferredPendingDate===today()?Number(data.inferredPendingToday)||0:0,
+        visibleSpendToday:snapshotVisibleSpendToday(payload)
+      });
       if(!quiet)$('syncStatus').textContent='Aggiornata';
       return {payload,unchanged:true};
     }
